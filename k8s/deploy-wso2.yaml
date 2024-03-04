@@ -1,0 +1,105 @@
+# Namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: wso2
+
+---
+# ConfigMap for API Manager configurations
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: wso2am-conf
+  namespace: wso2
+data:
+  deployment.toml: |
+    [server]
+    hostname = "wso2am"
+    node_ip = "10.0.0.1"
+    offset=0
+
+    [super_admin]
+    username = "admin"
+    password = "admin"
+    create_admin_account = false
+
+    [database.apim_db]
+    type = "h2"
+    url = "jdbc:h2:./repository/database/WSO2AM_DB;DB_CLOSE_ON_EXIT=FALSE;LOCK_TIMEOUT=60000"
+    username = "wso2carbon"
+    password = "wso2carbon"
+
+    [database.shared_db]
+    type = "h2"
+    url = "jdbc:h2:./repository/database/WSO2SHARED_DB;DB_CLOSE_ON_EXIT=FALSE;LOCK_TIMEOUT=60000"
+    username = "wso2carbon"
+    password = "wso2carbon"
+
+---
+# PersistentVolumeClaim for API Manager
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: wso2am-pvc
+  namespace: wso2
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+
+---
+# Deployment for API Manager
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: wso2am-deployment
+  namespace: wso2
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: wso2am
+  template:
+    metadata:
+      labels:
+        app: wso2am
+    spec:
+      containers:
+      - name: wso2am
+        image: wso2/wso2am:3.2.0
+        ports:
+        - containerPort: 9443
+        volumeMounts:
+        - name: wso2am-conf
+          mountPath: /home/wso2carbon/wso2-config-volume
+        - name: wso2am-persistent-storage
+          mountPath: /home/wso2carbon/wso2/repository/deployment/server/
+      volumes:
+      - name: wso2am-conf
+        configMap:
+          name: wso2am-conf
+      - name: wso2am-persistent-storage
+        persistentVolumeClaim:
+          claimName: wso2am-pvc
+
+---
+# Service for API Manager
+apiVersion: v1
+kind: Service
+metadata:
+  name: wso2am-service
+  namespace: wso2
+spec:
+  selector:
+    app: wso2am
+  ports:
+    - protocol: TCP
+      port: 9443
+      targetPort: 9443
+  type: LoadBalancer
+status:
+  loadBalancer:
+    ingress:
+    - ip: 10.99.130.100
